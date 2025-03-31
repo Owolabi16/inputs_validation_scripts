@@ -13,7 +13,7 @@ jobs:
       organization: aliu
       enable_ingress: true
       enable_status_cake: true
-      monitor_name: prod-monitor
+      monitor_name: staging-monitor
       app_url: https://prod.example.com
       k8_ingress_url: prod-ingress.example.com
       health_check_path: /health
