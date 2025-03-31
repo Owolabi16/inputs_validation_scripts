@@ -1,3 +1,106 @@
+name: workflow input validator
+
+on:
+  push:
+    branches: 
+      - main
+      
+  workflow_call:
+    secrets:
+      aws-github-oidc-iam-role:
+        required: true
+      slack_webhook_url:
+        required: true
+      npm_token:
+        required: true
+      tfc_token:
+        required: true
+      sentry_auth_token:
+        required: true
+      github-token:
+        required: true
+    inputs:
+      environment:
+        description: Environment name Staging or Prod
+        required: true
+        type: string
+      service_name:
+        description: Name of Service 
+        required: true
+        type: string
+      organization:
+        description: Organization Name
+        required: true
+        type: string
+        default: “aliu”
+      cron:
+        description: Cron and API Service
+        default: "false"
+        type: string
+      enable_tf:
+        description: Enable / Disable Terraform Step
+        default: "true"
+        type: string
+      enable_ingress:
+        description: Enable / Disable Ingress for the Service
+        required: true
+        default: true
+        type: boolean
+      enable_status_cake:
+        description: Enable / Disable Status Cake Check
+        required: true
+        default: true
+        type: boolean
+      route53_zoneid:
+        description: Specific Zone for Route53 deployment
+        default: "Z009”
+        type: string
+      replicas:
+        description: Number of Pods for the app
+        required: false
+        default: "1"
+        type: string
+      hpa_max_replicas:
+        description: Maximum Number of HPA Replicas
+        required: false
+        default: "2"
+        type: string
+      memory_limit:
+        description: Memory Allocation for Application
+        required: false
+        type: string
+      cpu_limit:
+        description: CPU Allocation for Application
+        required: false
+        type: string
+      cron_memory_limit:
+        description: Memory Allocation for Application
+        required: false
+        type: string
+      cron_cpu_limit:
+        description: CPU Allocation for Application
+        required: false
+        type: string
+      monitor_name:
+        description: Name for Status Cake Monitor
+        type: string
+      app_url:
+        description: Service Top-Level Domain Name
+        type: string
+      k8_ingress_url:
+        description: Kubernetes Ingress URL
+        type: string
+      ingress_group:
+        description: Specify a Unique Ingress Group
+        type: string
+      health_check_path:
+        description: Health Check and k8s Probe Path
+        type: string
+      hpa_enabled:
+        description: Enable/Disable HPA
+        default: true
+        type: boolean       
+        
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -14,7 +117,7 @@ jobs:
         run: pip install pyyaml
       
       - name: Validate workflow inputs
-        run: .github/scripts/validate_workflow_inputs.py
+        run: python .github/scripts/validate_workflow_inputs.py
         env:
           GITHUB_CONTEXT: ${{ toJSON(github) }}
           GITHUB_WORKFLOW_PATH: ${{ github.workflow_ref }}
