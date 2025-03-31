@@ -1,0 +1,26 @@
+# .github/workflows/test-validator.yml
+name: Test Workflow Input Validation
+
+on:
+  workflow_dispatch:  # Manual trigger for testing
+
+jobs:
+  test_complete_inputs:
+    uses: ./.github/workflows/validator.yml
+    with:
+      environment: prod
+      service_name: test-service
+      organization: aliu
+      enable_ingress: true
+      enable_status_cake: true
+      monitor_name: prod-monitor
+      app_url: https://prod.example.com
+      k8_ingress_url: prod-ingress.example.com
+      health_check_path: /health
+    secrets:
+      aws-github-oidc-iam-role: ${{ secrets.AWS_ROLE }}
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+      npm_token: ${{ secrets.NPM_TOKEN }}
+      tfc_token: ${{ secrets.TFC_TOKEN }}
+      sentry_auth_token: ${{ secrets.SENTRY_TOKEN }}
+      github-token: ${{ secrets.GITHUB_TOKEN }}
