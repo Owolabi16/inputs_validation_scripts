@@ -1,5 +1,5 @@
 # .github/workflows/test-validator.yml
-name: Test Workflow Input Validation
+name: Test Workflow Input Validation.
 
 on:
   workflow_dispatch:  # Manual trigger for testing
