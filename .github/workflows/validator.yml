@@ -53,7 +53,7 @@ on:
         type: boolean
       route53_zoneid:
         description: Specific Zone for Route53 deployment
-        default: "Z009”
+        default: Z009
         type: string
       replicas:
         description: Number of Pods for the app
