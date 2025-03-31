@@ -42,10 +42,10 @@ def load_workflow_file(workflow_path: str) -> Dict[str, Any]:
                     return workflow_data
             except Exception as inner_e:
                 print(f"Could not load from {default_path}: {inner_e}")
-                
-        # If we still can't load a workflow file, return an empty dict with inputs structure
-        print("Falling back to empty workflow structure")
-        return {"on": {"workflow_call": {"inputs": {}}}}
+        
+        # If we still can't load a workflow file, exit with an error
+        print("Could not load any workflow file. Exiting.")
+        sys.exit(1)
 
 
 
@@ -71,16 +71,6 @@ def get_provided_inputs() -> Dict[str, str]:
     try:
         context = json.loads(github_context)
         
-        # For testing - UNCOMMENT THIS TO TEST WITH MOCK INPUTS
-        # Always return these test inputs for validation testing
-        return {
-            "environment": "prod",
-            "service_name": "my-service",
-            "monitor_name": "staging-monitor",  # This will fail environment consistency check
-            "app_url": "https://prod.example.com",
-            "k8_ingress_url": "prod-ingress.k8s.example.com"
-        }
-        
         # For workflow_call, inputs are in event.inputs
         if 'event' in context and 'inputs' in context['event']:
             provided_inputs = context['event'].get('inputs', {})
@@ -93,7 +83,6 @@ def get_provided_inputs() -> Dict[str, str]:
             print("WARNING: This is a push event, not a workflow_call. No inputs to validate.")
             print("This script is designed to validate workflow_call inputs.")
             print("When used in a reusable workflow, it will validate the provided inputs.")
-            print("For testing, uncomment the test inputs in the script.")
             # Return empty dict for push events
             return {}
             
@@ -169,18 +158,19 @@ def main():
     provided_inputs = get_provided_inputs()
     print(f"Provided inputs: {list(provided_inputs.keys())}")
     
-    # For testing with hardcoded inputs when no actual inputs are available
-    if not provided_inputs:
-        print("No inputs were provided for validation. Using test inputs.")
-        provided_inputs = {
-            "environment": "prod",
-            "service_name": "my-service",
-            "monitor_name": "staging-monitor",  # This will fail environment consistency check
-            "app_url": "https://prod.example.com",
-            "k8_ingress_url": "prod-ingress.k8s.example.com",
-            "health_check_path": "/health"
-        }
-        print(f"Using test inputs: {list(provided_inputs.keys())}")
+    # If no inputs are provided and this isn't a workflow_call event, exit early
+    github_context = os.environ.get('GITHUB_CONTEXT', '{}')
+    try:
+        context = json.loads(github_context)
+        event_type = context.get('event_name', '')
+        if event_type != 'workflow_call' and not provided_inputs:
+            print("INFO: This is not being run as a workflow_call event.")
+            print("INFO: The validator will only validate inputs when called via workflow_call.")
+            print("INFO: No validation performed during push events.")
+            # Exit successfully since there's nothing to validate in a push event
+            sys.exit(0)
+    except:
+        pass
     
     # Print debugging information about environment
     if 'environment' in provided_inputs:
