@@ -8,7 +8,7 @@ jobs:
   test_complete_inputs:
     uses: ./.github/workflows/validator.yml
     with:
-      environment: prod
+      environment: staging
       service_name: test-service
       organization: aliu
       enable_ingress: true
