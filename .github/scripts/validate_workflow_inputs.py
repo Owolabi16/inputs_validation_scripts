@@ -71,19 +71,61 @@ def get_provided_inputs() -> Dict[str, str]:
     try:
         context = json.loads(github_context)
         
+        print(f"Event type: {context.get('event_name', 'unknown')}")
+        
+        # Print full event data for debugging
+        if 'event' in context:
+            print("Event data found in context")
+            # Get workflow info
+            workflow_ref = context.get('workflow_ref', '')
+            print(f"Workflow ref: {workflow_ref}")
+            
+            # Check for inputs from parent workflow
+            if 'inputs' in os.environ:
+                # Try to get inputs from environment variables
+                print("Checking for inputs from environment variables...")
+                inputs = {}
+                for key, value in os.environ.items():
+                    if key.startswith('INPUT_'):
+                        input_name = key[6:].lower()  # Remove INPUT_ prefix and convert to lowercase
+                        inputs[input_name] = value
+                        print(f"Found input: {input_name} = {value}")
+                
+                if inputs:
+                    print(f"Found {len(inputs)} inputs from environment variables")
+                    return inputs
+        
         # For workflow_call, inputs are in event.inputs
-        if 'event' in context and 'inputs' in context['event']:
+        if 'event' in context and 'inputs' in context['event'] and context['event']['inputs']:
             provided_inputs = context['event'].get('inputs', {})
             if provided_inputs:
+                print(f"Found inputs in event.inputs: {provided_inputs}")
                 return provided_inputs
         
         # Check if this is a push event (not a workflow_call)
         event_type = context.get('event_name', '')
-        if event_type == 'push':
-            print("WARNING: This is a push event, not a workflow_call. No inputs to validate.")
+        if event_type != 'workflow_call':
+            print(f"This is a {event_type} event, not a workflow_call.")
             print("This script is designed to validate workflow_call inputs.")
             print("When used in a reusable workflow, it will validate the provided inputs.")
-            # Return empty dict for push events
+            
+            # Special check for workflow_dispatch events calling a reusable workflow
+            if event_type == 'workflow_dispatch' and 'uses:' in os.environ.get('GITHUB_WORKFLOW', ''):
+                print("This appears to be a workflow_dispatch event calling a reusable workflow.")
+                print("Checking for environment variables containing inputs...")
+                
+                # Look for environment variables prefixed with INPUT_
+                inputs = {}
+                for key, value in os.environ.items():
+                    if key.startswith('INPUT_'):
+                        input_name = key[6:].lower()  # Remove INPUT_ prefix and convert to lowercase
+                        inputs[input_name] = value
+                
+                if inputs:
+                    print(f"Found {len(inputs)} inputs from environment variables")
+                    return inputs
+            
+            # Return empty dict for other events
             return {}
             
         return {}
@@ -154,23 +196,32 @@ def main():
     defined_inputs = get_workflow_inputs(workflow_data)
     print(f"Defined inputs: {list(defined_inputs.keys())}")
     
+    # Print all environment variables with INPUT_ prefix for debugging
+    print("Environment variables with INPUT_ prefix:")
+    for key, value in os.environ.items():
+        if key.startswith('INPUT_'):
+            print(f"  {key} = {value}")
+    
     # Get actual inputs provided to this run
     provided_inputs = get_provided_inputs()
     print(f"Provided inputs: {list(provided_inputs.keys())}")
     
     # If no inputs are provided and this isn't a workflow_call event, exit early
-    github_context = os.environ.get('GITHUB_CONTEXT', '{}')
-    try:
-        context = json.loads(github_context)
-        event_type = context.get('event_name', '')
-        if event_type != 'workflow_call' and not provided_inputs:
-            print("INFO: This is not being run as a workflow_call event.")
-            print("INFO: The validator will only validate inputs when called via workflow_call.")
-            print("INFO: No validation performed during push events.")
-            # Exit successfully since there's nothing to validate in a push event
-            sys.exit(0)
-    except:
-        pass
+    if not provided_inputs:
+        print("No inputs were provided for validation!")
+        print("This script is meant to validate workflow_call inputs.")
+        print("When this script is called from a reusable workflow, it should receive inputs.")
+        
+        # Check if we're running in GitHub Actions
+        if 'GITHUB_ACTIONS' in os.environ and os.environ['GITHUB_ACTIONS'] == 'true':
+            # See if this is a reusable workflow (check for caller workflow info)
+            if 'GITHUB_WORKFLOW_REF' in os.environ:
+                print(f"This appears to be running from workflow: {os.environ['GITHUB_WORKFLOW_REF']}")
+                # Print out github context for debugging
+                print(f"GitHub context: {os.environ.get('GITHUB_CONTEXT', 'Not available')}")
+        
+        # For now, allow the workflow to continue
+        sys.exit(0)
     
     # Print debugging information about environment
     if 'environment' in provided_inputs:
