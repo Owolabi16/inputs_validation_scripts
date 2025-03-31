@@ -41,13 +41,13 @@ def get_provided_inputs() -> Dict[str, str]:
         
         # For testing - UNCOMMENT THIS TO TEST WITH MOCK INPUTS
         # Always return these test inputs for validation testing
-        return {
-            "environment": "prod",
-            "service_name": "my-service",
-            "monitor_name": "staging-monitor",  # This will fail environment consistency check
-            "app_url": "https://prod.example.com",
-            "k8_ingress_url": "prod-ingress.k8s.example.com"
-        }
+        # return {
+        #     "environment": "prod",
+        #     "service_name": "my-service",
+        #     "monitor_name": "staging-monitor",  # This will fail environment consistency check
+        #     "app_url": "https://prod.example.com",
+        #     "k8_ingress_url": "prod-ingress.k8s.example.com"
+        # }
         
         # For workflow_call, inputs are in event.inputs
         if 'event' in context and 'inputs' in context['event']:
