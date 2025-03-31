@@ -120,4 +120,4 @@ jobs:
         run: python .github/scripts/validate_workflow_inputs.py
         env:
           GITHUB_CONTEXT: ${{ toJSON(github) }}
-          GITHUB_WORKFLOW_PATH: ${{ github.workflow_ref }}
+          GITHUB_WORKFLOW_PATH: ${{ github.workspace }}/.github/workflows/validator.yml
