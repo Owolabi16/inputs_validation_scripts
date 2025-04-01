@@ -1,12 +1,4 @@
 #!/usr/bin/env python3
-"""
-GitHub Workflow Input Validator
-
-This script validates that all required workflow inputs are provided before the workflow gets triggered.
-It specifically checks:
-1. All required inputs without defaults are supplied
-2. When environment is set, it ensures monitor_name, app_url, and k8_ingress_url contain the environment name in lowercase
-"""
 
 import os
 import sys
@@ -71,29 +63,20 @@ def get_provided_inputs() -> Dict[str, str]:
     try:
         context = json.loads(github_context)
         
+        # Print event type for debugging
         print(f"Event type: {context.get('event_name', 'unknown')}")
         
-        # Print full event data for debugging
-        if 'event' in context:
-            print("Event data found in context")
-            # Get workflow info
-            workflow_ref = context.get('workflow_ref', '')
-            print(f"Workflow ref: {workflow_ref}")
-            
-            # Check for inputs from parent workflow
-            if 'inputs' in os.environ:
-                # Try to get inputs from environment variables
-                print("Checking for inputs from environment variables...")
-                inputs = {}
-                for key, value in os.environ.items():
-                    if key.startswith('INPUT_'):
-                        input_name = key[6:].lower()  # Remove INPUT_ prefix and convert to lowercase
-                        inputs[input_name] = value
-                        print(f"Found input: {input_name} = {value}")
-                
-                if inputs:
-                    print(f"Found {len(inputs)} inputs from environment variables")
-                    return inputs
+        # Check for inputs from environment variables (how GitHub passes inputs to reusable workflows)
+        inputs = {}
+        for key, value in os.environ.items():
+            if key.startswith('INPUT_'):
+                input_name = key[6:].lower()  # Remove INPUT_ prefix and convert to lowercase
+                inputs[input_name] = value
+                print(f"Found input from env: {input_name} = {value}")
+        
+        if inputs:
+            print(f"Found {len(inputs)} inputs from environment variables")
+            return inputs
         
         # For workflow_call, inputs are in event.inputs
         if 'event' in context and 'inputs' in context['event'] and context['event']['inputs']:
@@ -104,28 +87,11 @@ def get_provided_inputs() -> Dict[str, str]:
         
         # Check if this is a push event (not a workflow_call)
         event_type = context.get('event_name', '')
-        if event_type != 'workflow_call':
-            print(f"This is a {event_type} event, not a workflow_call.")
+        if event_type == 'push':
+            print("WARNING: This is a push event, not a workflow_call. No inputs to validate.")
             print("This script is designed to validate workflow_call inputs.")
             print("When used in a reusable workflow, it will validate the provided inputs.")
-            
-            # Special check for workflow_dispatch events calling a reusable workflow
-            if event_type == 'workflow_dispatch' and 'uses:' in os.environ.get('GITHUB_WORKFLOW', ''):
-                print("This appears to be a workflow_dispatch event calling a reusable workflow.")
-                print("Checking for environment variables containing inputs...")
-                
-                # Look for environment variables prefixed with INPUT_
-                inputs = {}
-                for key, value in os.environ.items():
-                    if key.startswith('INPUT_'):
-                        input_name = key[6:].lower()  # Remove INPUT_ prefix and convert to lowercase
-                        inputs[input_name] = value
-                
-                if inputs:
-                    print(f"Found {len(inputs)} inputs from environment variables")
-                    return inputs
-            
-            # Return empty dict for other events
+            # Return empty dict for push events
             return {}
             
         return {}
@@ -158,18 +124,39 @@ def validate_required_inputs(defined_inputs: Dict[str, Dict[str, Any]], provided
 
 def validate_environment_consistency(environment: str, provided_inputs: Dict[str, str]) -> List[Tuple[str, str]]:
     """
-    Validate that when environment is set, monitor_name, app_url, and k8_ingress_url 
-    contain the environment name in lowercase.
+    Validate that when environment is set, the values of monitor_name, app_url, and k8_ingress_url 
+    do not contain other environment names (staging/prod/dev).
+    Also validates that monitor_name doesn't have dashes or underscores.
     """
     environment_lowercase = environment.lower()
     inconsistent_inputs = []
+    
+    # Define all environment names
+    all_environments = ["prod", "production", "staging", "stage", "dev", "development"]
+    
+    # Remove the current environment from the list of forbidden environments
+    forbidden_environments = [env for env in all_environments if not env.startswith(environment_lowercase)]
     
     fields_to_check = ['monitor_name', 'app_url', 'k8_ingress_url']
     
     for field in fields_to_check:
         if field in provided_inputs and provided_inputs[field]:
-            if environment_lowercase not in provided_inputs[field].lower():
-                inconsistent_inputs.append((field, f"should contain '{environment_lowercase}'"))
+            field_value = provided_inputs[field].lower()
+            
+            # Check for forbidden environments in the field value
+            for forbidden_env in forbidden_environments:
+                if forbidden_env in field_value:
+                    detail = f"contains '{forbidden_env}' but environment is set to '{environment_lowercase}'. " \
+                             f"When environment is '{environment_lowercase}', values should not contain " \
+                             f"other environment names like {', '.join(forbidden_environments)}."
+                    inconsistent_inputs.append((field, detail))
+                    break  # Only report one error per field
+            
+            # Additional validation for monitor_name: no dashes or underscores
+            if field == 'monitor_name' and ('-' in field_value or '_' in field_value):
+                detail = "contains dashes (-) or underscores (_), which are not allowed. " \
+                         "Use spaces instead, like 'staging monitor report'."
+                inconsistent_inputs.append((field, detail))
     
     return inconsistent_inputs
 
@@ -202,21 +189,23 @@ def main():
         if key.startswith('INPUT_'):
             print(f"  {key} = {value}")
     
-    # Since we're in a test environment, use hardcoded inputs that match your test workflow
-    # This simulates what would be passed to the validator in a real workflow
-    provided_inputs = {
-        "environment": "prod",
-        "service_name": "test-service",
-        "organization": "aliu",
-        "enable_ingress": "true",
-        "enable_status_cake": "true",
-        "monitor_name": "staging-monitor",  # This should fail validation
-        "app_url": "https://prod.example.com",
-        "k8_ingress_url": "prod-ingress.example.com",
-        "health_check_path": "/health"
-    }
+    # Get actual inputs provided to this run
+    provided_inputs = get_provided_inputs()
+    print(f"Provided inputs: {list(provided_inputs.keys())}")
     
-    print(f"Using test inputs for validation: {list(provided_inputs.keys())}")
+    # If no inputs are provided and this isn't a workflow_call event, exit early
+    github_context = os.environ.get('GITHUB_CONTEXT', '{}')
+    try:
+        context = json.loads(github_context)
+        event_type = context.get('event_name', '')
+        if event_type != 'workflow_call' and not provided_inputs:
+            print("INFO: This is not being run as a workflow_call event.")
+            print("INFO: The validator will only validate inputs when called via workflow_call.")
+            print("INFO: No validation performed during push events.")
+            # Exit successfully since there's nothing to validate in a push event
+            sys.exit(0)
+    except:
+        pass
     
     # Print debugging information about environment
     if 'environment' in provided_inputs:
@@ -236,18 +225,21 @@ def main():
             provided_inputs
         )
     
-    # Report validation results
+    # Report validation results with more detailed messages
     if missing_inputs or inconsistent_inputs:
         if missing_inputs:
             print("::error::Missing required workflow inputs:")
             for input_name in missing_inputs:
-                print(f"::error::  - {input_name}")
+                print(f"::error::  - {input_name}: This input is required but was not provided.")
+                print(f"    Please add '{input_name}' to your workflow call.")
         
         if inconsistent_inputs:
-            print("::error::Environment consistency issues:")
+            print("::error::Environment consistency issues found:")
             for input_name, message in inconsistent_inputs:
-                print(f"::error::  - {input_name} {message}")
-        
+                print(f"::error::  - {input_name}: {message}")
+                
+        print("\n::error::Please fix these issues to ensure consistent environment naming across resources.")
+        print("::error::Proper naming helps prevent accidental deployments to wrong environments.")
         sys.exit(1)
     else:
         print("All workflow inputs are valid!")
