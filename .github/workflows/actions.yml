@@ -14,8 +14,8 @@ jobs:
       enable_ingress: true
       enable_status_cake: true
       monitor_name: Reports Prod 
-      app_url: https://staging-reports.example.com
-      k8_ingress_url: example.com
+      app_url: https://reports.example.com
+      k8_ingress_url:  staging-example.com
       health_check_path: /health
     secrets:
       aws-github-oidc-iam-role: ${{ secrets.AWS_ROLE }}
