@@ -8,14 +8,14 @@ jobs:
   test_complete_inputs:
     uses: ./.github/workflows/validator.yml
     with:
-      environment: staging
+      environment: prod
       service_name: test-service
       organization: aliu
       enable_ingress: true
       enable_status_cake: true
-      monitor_name: staging-monitor
-      app_url: https://prod.example.com
-      k8_ingress_url: prod-ingress.example.com
+      monitor_name: Reports Prod 
+      app_url: https://reports.example.com
+      k8_ingress_url: example.com
       health_check_path: /health
     secrets:
       aws-github-oidc-iam-role: ${{ secrets.AWS_ROLE }}
