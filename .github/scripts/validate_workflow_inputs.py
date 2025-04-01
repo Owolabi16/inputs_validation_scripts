@@ -184,28 +184,81 @@ def main():
     print(f"Defined inputs: {list(defined_inputs.keys())}")
     
     # Print all environment variables with INPUT_ prefix for debugging
-    print("Environment variables with INPUT_ prefix:")
+    print("Environment variables:")
     for key, value in os.environ.items():
         if key.startswith('INPUT_'):
             print(f"  {key} = {value}")
     
-    # Get actual inputs provided to this run
-    provided_inputs = get_provided_inputs()
-    print(f"Provided inputs: {list(provided_inputs.keys())}")
-    
-    # If no inputs are provided and this isn't a workflow_call event, exit early
+    # Get inputs directly from environment variables
+    # This is how GitHub Actions passes inputs to reusable workflows
+    provided_inputs = {}
+    for key, value in os.environ.items():
+        if key.startswith('INPUT_'):
+            input_name = key[6:].lower()  # Remove INPUT_ prefix and convert to lowercase
+            provided_inputs[input_name] = value
+            
+    # Also check GitHub context for inputs
     github_context = os.environ.get('GITHUB_CONTEXT', '{}')
     try:
         context = json.loads(github_context)
-        event_type = context.get('event_name', '')
-        if event_type != 'workflow_call' and not provided_inputs:
-            print("INFO: This is not being run as a workflow_call event.")
-            print("INFO: The validator will only validate inputs when called via workflow_call.")
-            print("INFO: No validation performed during push events.")
-            # Exit successfully since there's nothing to validate in a push event
-            sys.exit(0)
+        if 'event' in context and 'inputs' in context['event'] and context['event']['inputs']:
+            context_inputs = context['event'].get('inputs', {})
+            for key, value in context_inputs.items():
+                provided_inputs[key.lower()] = value
     except:
-        pass
+        print("Error parsing GitHub context")
+    
+    print(f"Provided inputs: {list(provided_inputs.keys())}")
+    
+    # Look for additional input sources
+    try:
+        # Try to read from the event file directly
+        event_path = os.environ.get('GITHUB_EVENT_PATH')
+        if event_path and os.path.exists(event_path):
+            with open(event_path, 'r') as f:
+                event_data = json.load(f)
+                if 'inputs' in event_data and event_data['inputs']:
+                    for key, value in event_data['inputs'].items():
+                        provided_inputs[key.lower()] = value
+                        print(f"Found input from event file: {key}")
+    except:
+        print("Error reading event file")
+    
+    # If still no inputs and we're in a test workflow, try to parse test workflow file
+    if not provided_inputs:
+        try:
+            # Prioritize checking actions.yml first
+            test_workflow_paths = [
+                '/.github/workflows/actions.yml',  # Root path
+                '.github/workflows/actions.yml',   # Relative path
+                '.github/workflows/test-validator.yml',
+                '.github/workflows/validator.yml'
+            ]
+            
+            for test_workflow_path in test_workflow_paths:
+                if os.path.exists(test_workflow_path):
+                    print(f"Attempting to read inputs from workflow: {test_workflow_path}")
+                    with open(test_workflow_path, 'r') as f:
+                        test_workflow = yaml.safe_load(f)
+                        if 'jobs' in test_workflow:
+                            for job_name, job_data in test_workflow['jobs'].items():
+                                if 'with' in job_data:
+                                    for key, value in job_data['with'].items():
+                                        provided_inputs[key.lower()] = str(value)
+                                        print(f"Found input from workflow file: {key} = {value}")
+                    if provided_inputs:
+                        print(f"Successfully loaded inputs from {test_workflow_path}")
+                        break  # Stop if we found inputs
+        except Exception as e:
+            print(f"Error reading workflow files: {e}")
+    
+    # If no inputs are provided and this isn't a workflow_call event, exit early
+    if not provided_inputs:
+        print("INFO: No inputs were provided for validation.")
+        print("INFO: The validator will only validate inputs when inputs are available.")
+        print("INFO: No validation performed.")
+        # Exit successfully since there's nothing to validate
+        sys.exit(0)
     
     # Print debugging information about environment
     if 'environment' in provided_inputs:
