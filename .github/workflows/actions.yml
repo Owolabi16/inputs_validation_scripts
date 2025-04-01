@@ -13,9 +13,9 @@ jobs:
       organization: aliu
       enable_ingress: true
       enable_status_cake: true
-      monitor_name: Reports Prod 
+      monitor_name: Reports Staging
       app_url: https://reports.example.com
-      k8_ingress_url:  staging-example.com
+      k8_ingress_url:  example.com
       health_check_path: /health
     secrets:
       aws-github-oidc-iam-role: ${{ secrets.AWS_ROLE }}
